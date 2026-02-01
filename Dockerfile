@@ -1,5 +1,6 @@
 FROM python:3.12-slim-bookworm
 
+# Instala dependências do sistema para Playwright/Chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -24,11 +25,10 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 RUN playwright install --with-deps chromium
 
 COPY . .
 
-ENV PORT=5000
-
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "--timeout", "120", "app:app"]
+# Usa variável de ambiente PORT do Render (padrão 10000)
+# Sintaxe shell para expandir $PORT
+CMD sh -c "gunicorn --bind 0.0.0.0:${PORT:-10000} --timeout 120 app:app"
