@@ -43,37 +43,45 @@ def save_current_index(index):
         json.dump({'current_index': index}, f)
 
 def take_screenshot(url, index):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            viewport={'width': 1024, 'height': 768},
-            device_scale_factor=1,
-            user_agent=(
-                "Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) "
-                "AppleWebKit/601.1.46 (KHTML, like Gecko) "
-                "Version/9.0 Mobile/13G36 Safari/601.1"
-            ),
-            # Ajuda em alguns sites que bloqueiam headless
-            java_script_enabled=True,
-            bypass_csp=True,
-        )
-        page = context.new_page()
-        try:
-            page.goto(url, wait_until='networkidle', timeout=60000)
-            # Pequeno delay extra para carregar conteúdo dinâmico (opcional)
-            page.wait_for_timeout(2000)
+    try:
+        with sync_playwright() as p:
+            print(f"Iniciando browser para {url}")
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',               # Essencial em containers como Render
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',    # Evita problemas de memória compartilhada
+                    '--disable-gpu',              # GPU não disponível no free
+                    '--disable-extensions',
+                ]
+            )
+            print("Browser lançado com sucesso")
+            context = browser.new_context(
+                viewport={'width': 1024, 'height': 768},
+                device_scale_factor=1,
+                user_agent="Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1",
+                java_script_enabled=True,
+                bypass_csp=True,
+                ignore_https_errors=True,  # Ajuda em sites com SSL issues
+            )
+            page = context.new_page()
+            print(f"Navegando para {url}")
+            page.goto(url, wait_until='networkidle', timeout=90000)  # Aumentado para 90s
+            print("Página carregada, aguardando extra")
+            page.wait_for_timeout(3000)  # Delay extra para JS dinâmico
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"screenshot_{index:02d}_{timestamp}.png"  # :02d para índice com 2 dígitos
+            filename = f"screenshot_{index:02d}_{timestamp}.png"
             path = os.path.join(SCREENSHOTS_DIR, filename)
             page.screenshot(path=path, full_page=False)
-            print(f"Screenshot salvo: {path}")
-        except Exception as e:
-            error_msg = f"Erro ao capturar {url}: {str(e)}"
-            print(error_msg)
-            # Opcional: salvar screenshot de erro ou log
-            path = None
-        finally:
+            print(f"Screenshot salvo com sucesso: {path}")
+    except Exception as e:
+        error_msg = f"Erro ao capturar {url}: {str(e)}"
+        print(error_msg)  # Isso vai para os logs do Render
+        path = None
+    finally:
+        if 'browser' in locals():
             browser.close()
     return path
 
