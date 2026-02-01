@@ -43,46 +43,49 @@ def save_current_index(index):
         json.dump({'current_index': index}, f)
 
 def take_screenshot(url, index):
+    path = None
     try:
         with sync_playwright() as p:
             print(f"Iniciando browser para {url}")
             browser = p.chromium.launch(
                 headless=True,
                 args=[
-                    '--no-sandbox',               # Essencial em containers como Render
+                    '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',    # Evita problemas de memória compartilhada
-                    '--disable-gpu',              # GPU não disponível no free
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
                     '--disable-extensions',
+                    '--disable-background-networking',
                 ]
             )
-            print("Browser lançado com sucesso")
+            print("Browser lançado")
             context = browser.new_context(
                 viewport={'width': 1024, 'height': 768},
                 device_scale_factor=1,
                 user_agent="Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1",
                 java_script_enabled=True,
                 bypass_csp=True,
-                ignore_https_errors=True,  # Ajuda em sites com SSL issues
+                ignore_https_errors=True,
             )
             page = context.new_page()
             print(f"Navegando para {url}")
-            page.goto(url, wait_until='networkidle', timeout=90000)  # Aumentado para 90s
+            page.goto(url, wait_until='networkidle', timeout=90000)
             print("Página carregada, aguardando extra")
-            page.wait_for_timeout(3000)  # Delay extra para JS dinâmico
-            
+            page.wait_for_timeout(2000)  # Reduzido para 2s para acelerar
+
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"screenshot_{index:02d}_{timestamp}.png"
             path = os.path.join(SCREENSHOTS_DIR, filename)
             page.screenshot(path=path, full_page=False)
-            print(f"Screenshot salvo com sucesso: {path}")
+            print(f"Screenshot salvo: {path}")
+
+            # NÃO chame browser.close() aqui fora — o 'with' cuida do fechamento automático
+            # O context e browser fecham corretamente ao sair do bloco
+
     except Exception as e:
-        error_msg = f"Erro ao capturar {url}: {str(e)}"
-        print(error_msg)  # Isso vai para os logs do Render
+        print(f"Erro ao capturar {url}: {str(e)}")
         path = None
-    finally:
-        if 'browser' in locals():
-            browser.close()
+
     return path
 
 @app.route('/trigger')
