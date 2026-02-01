@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from playwright.sync_api import sync_playwright
 import os
 import json
@@ -81,8 +81,6 @@ def take_screenshot(url, index):
             page.screenshot(path=path, full_page=False)
             print(f"Screenshot salvo: {path}")
 
-            # Não chame browser.close() manual - o 'with' cuida disso
-
     except Exception as e:
         print(f"Erro ao capturar {url}: {str(e)}")
         path = None
@@ -101,6 +99,15 @@ def trigger():
     status = "sucesso" if path else "falha"
     return f"[{status}] Screenshot do site {current_index+1}/{len(sites)}: {url} → {path or 'falhou'}"
 
+@app.route('/latest-screenshot')
+def latest_screenshot():
+    # Pega o arquivo mais recente na pasta screenshots
+    files = [f for f in os.listdir(SCREENSHOTS_DIR) if f.endswith('.png')]
+    if not files:
+        return "Nenhuma screenshot encontrada", 404
+    latest_file = max(files, key=lambda f: os.path.getmtime(os.path.join(SCREENSHOTS_DIR, f)))
+    return send_from_directory(SCREENSHOTS_DIR, latest_file)
+
 @app.route('/')
 def home():
     return (
@@ -108,7 +115,8 @@ def home():
         f"Total de sites: {len(sites)}<br>"
         f"Próximo índice: {get_current_index()}<br>"
         f"Use /trigger para capturar o próximo screenshot.<br>"
-        f"Configure cron-job.org para chamar esta URL a cada 5 minutos."
+        f"Use /latest-screenshot para ver a última imagem.<br>"
+        f"Configure cron-job.org para chamar /trigger a cada 5 minutos."
     )
 
 if __name__ == '__main__':
