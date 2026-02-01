@@ -56,6 +56,8 @@ def take_screenshot(url, index):
                     '--disable-gpu',
                     '--disable-extensions',
                     '--disable-background-networking',
+                    '--disable-sync',
+                    '--disable-background-timer-throttling',
                 ]
             )
             print("Browser lançado")
@@ -71,7 +73,7 @@ def take_screenshot(url, index):
             print(f"Navegando para {url}")
             page.goto(url, wait_until='networkidle', timeout=90000)
             print("Página carregada, aguardando extra")
-            page.wait_for_timeout(2000)  # Reduzido para 2s para acelerar
+            page.wait_for_timeout(1000)  # Reduzido para 1s para acelerar
 
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"screenshot_{index:02d}_{timestamp}.png"
@@ -79,8 +81,7 @@ def take_screenshot(url, index):
             page.screenshot(path=path, full_page=False)
             print(f"Screenshot salvo: {path}")
 
-            # NÃO chame browser.close() aqui fora — o 'with' cuida do fechamento automático
-            # O context e browser fecham corretamente ao sair do bloco
+            # Não chame browser.close() manual - o 'with' cuida disso
 
     except Exception as e:
         print(f"Erro ao capturar {url}: {str(e)}")
