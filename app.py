@@ -45,11 +45,15 @@ def take_screenshot(url, index):
             user_agent="Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1"
         )
         page = context.new_page()
-        page.goto(url, wait_until='networkidle')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"screenshot_{index}_{timestamp}.png"
-        path = os.path.join(SCREENSHOTS_DIR, filename)
-        page.screenshot(path=path, full_page=False)
+        try:
+            page.goto(url, wait_until='networkidle', timeout=60000)  # Adicionado timeout para sites lentos
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"screenshot_{index}_{timestamp}.png"
+            path = os.path.join(SCREENSHOTS_DIR, filename)
+            page.screenshot(path=path, full_page=False)
+        except Exception as e:
+            print(f"Erro ao capturar {url}: {e}")
+            path = None  # Ou lide com erro
         browser.close()
     return path
 
