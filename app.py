@@ -1,10 +1,10 @@
-from flask import Flask, send_from_directory
+from flask import Flask, Response
 from playwright.sync_api import sync_playwright
 import os
 import json
 from datetime import datetime
-import requests
 import base64
+import requests
 
 app = Flask(__name__)
 
@@ -70,9 +70,6 @@ def take_screenshot(url, index):
     except Exception as e:
         print(f"Erro ao capturar {url}: {str(e)}")
         path = None
-    finally:
-        if 'browser' in locals():
-            browser.close()
     return path
 
 def upload_to_github(image_path):
@@ -91,7 +88,7 @@ def upload_to_github(image_path):
             "X-GitHub-Api-Version": "2022-11-28"
         }
 
-        # Primeiro, pega o SHA atual (se o arquivo já existe)
+        # Pega o SHA atual se o arquivo já existe
         sha = None
         resp = requests.get(url, headers=headers)
         if resp.status_code == 200:
@@ -100,7 +97,7 @@ def upload_to_github(image_path):
         payload = {
             "message": "Atualiza screenshot mais recente",
             "content": content,
-            "sha": sha,  # se não existir, omitido = cria novo
+            "sha": sha,
             "committer": {"name": "Render Bot", "email": "render@bot.com"}
         }
 
@@ -132,9 +129,23 @@ def trigger():
     status = "sucesso" if local_path else "falha"
     return f"[{status}] Site {current_index+1}/{len(sites)}: {url} → {img_url or 'falhou'}"
 
+@app.route('/latest-screenshot')
+def latest_screenshot():
+    files = [f for f in os.listdir(SCREENSHOTS_DIR) if f.endswith('.png')]
+    if not files:
+        return "Nenhuma screenshot encontrada", 404
+    latest_file = max(files, key=lambda f: os.path.getmtime(os.path.join(SCREENSHOTS_DIR, f)))
+    return send_from_directory(SCREENSHOTS_DIR, latest_file)
+
 @app.route('/')
 def home():
-    return "App rodando! Use /trigger para gerar e subir screenshot para GitHub."
+    return (
+        f"Aplicação de screenshots rodando!<br>"
+        f"Total de sites: {len(sites)}<br>"
+        f"Próximo índice: {get_current_index()}<br>"
+        f"Use /trigger para capturar o próximo screenshot.<br>"
+        f"Configure cron-job.org para chamar /trigger a cada 5 minutos."
+    )
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
