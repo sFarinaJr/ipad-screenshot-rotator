@@ -1,8 +1,5 @@
-# Use uma imagem base Python recente (suporta Playwright bem)
 FROM python:3.12-slim-bookworm
 
-# Instala dependências do sistema necessárias para Playwright/Chromium
-# (isso roda como root durante o build, sem pedir senha)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -23,21 +20,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Define diretório de trabalho
 WORKDIR /app
 
-# Copia e instala pacotes Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Instala os browsers do Playwright (agora com dependências já instaladas)
 RUN playwright install --with-deps chromium
 
-# Copia o resto do código
 COPY . .
 
-# Expõe a porta (Render usa variável PORT)
 ENV PORT=5000
 
-# Comando para rodar a app (usa gunicorn para produção, ou python direto)
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-5000}", "--timeout", "120", "app:app"]
