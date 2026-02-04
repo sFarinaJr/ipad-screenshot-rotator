@@ -1,4 +1,4 @@
-from flask import Flask, Response
+from flask import Flask, send_from_directory
 from playwright.sync_api import sync_playwright
 import os
 import json
@@ -51,67 +51,77 @@ def take_screenshot(url, index):
     path = None
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=[
-                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-                '--disable-gpu', '--disable-extensions'
-            ])
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-extensions',
+                    '--disable-background-networking',
+                    '--disable-sync',
+                    '--disable-background-timer-throttling',
+                ]
+            )
+            print("Browser lançado")
             context = browser.new_context(
                 viewport={'width': 1024, 'height': 768},
-                user_agent="Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1"
+                device_scale_factor=1,
+                user_agent="Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1",
+                java_script_enabled=True,
+                bypass_csp=True,
+                ignore_https_errors=True,
             )
             page = context.new_page()
+            print(f"Navegando para {url}")
             page.goto(url, wait_until='networkidle', timeout=90000)
-            page.wait_for_timeout(1000)
+            print("Página carregada - aguardando 10 segundos extras para conteúdo dinâmico")
+            page.wait_for_timeout(10000)  # ← PAUSA DE 10 SEGUNDOS AQUI
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"screenshot_{index:02d}_{timestamp}.png"
             path = os.path.join(SCREENSHOTS_DIR, filename)
             page.screenshot(path=path, full_page=False)
             print(f"Screenshot salvo localmente: {path}")
+
+            # Upload para GitHub
+            if GITHUB_TOKEN and path:
+                try:
+                    with open(path, 'rb') as f:
+                        content = base64.b64encode(f.read()).decode('utf-8')
+
+                    api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+                    headers = {
+                        "Authorization": f"Bearer {GITHUB_TOKEN}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28"
+                    }
+
+                    sha = None
+                    resp = requests.get(api_url, headers=headers)
+                    if resp.status_code == 200:
+                        sha = resp.json().get('sha')
+
+                    payload = {
+                        "message": "Atualiza screenshot mais recente",
+                        "content": content,
+                        "sha": sha,
+                        "committer": {"name": "Render Bot", "email": "render@bot.com"}
+                    }
+
+                    response = requests.put(api_url, headers=headers, json=payload)
+                    if response.status_code in (200, 201):
+                        url_img = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{GITHUB_FILE_PATH}"
+                        print(f"Upload GitHub sucesso: {url_img}")
+                    else:
+                        print(f"Falha upload GitHub: {response.status_code} - {response.text}")
+                except Exception as e:
+                    print(f"Erro upload GitHub: {str(e)}")
+
     except Exception as e:
         print(f"Erro ao capturar {url}: {str(e)}")
         path = None
     return path
-
-def upload_to_github(image_path):
-    if not GITHUB_TOKEN:
-        print("GITHUB_TOKEN não configurado no Render!")
-        return None
-
-    try:
-        with open(image_path, 'rb') as f:
-            content = base64.b64encode(f.read()).decode('utf-8')
-
-        url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-        headers = {
-            "Authorization": f"Bearer {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-
-        # Pega o SHA atual se o arquivo já existe
-        sha = None
-        resp = requests.get(url, headers=headers)
-        if resp.status_code == 200:
-            sha = resp.json().get('sha')
-
-        payload = {
-            "message": "Atualiza screenshot mais recente",
-            "content": content,
-            "sha": sha,
-            "committer": {"name": "Render Bot", "email": "render@bot.com"}
-        }
-
-        response = requests.put(url, headers=headers, json=payload)
-        if response.status_code in (200, 201):
-            url_img = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/main/{GITHUB_FILE_PATH}"
-            print(f"Upload GitHub sucesso: {url_img}")
-            return url_img
-        else:
-            print(f"Falha upload GitHub: {response.status_code} - {response.text}")
-            return None
-    except Exception as e:
-        print(f"Erro upload GitHub: {str(e)}")
-        return None
 
 @app.route('/trigger')
 def trigger():
@@ -122,20 +132,16 @@ def trigger():
     next_index = (current_index + 1) % len(sites)
     save_current_index(next_index)
     
-    img_url = None
-    if local_path:
-        img_url = upload_to_github(local_path)
-    
     status = "sucesso" if local_path else "falha"
-    return f"[{status}] Site {current_index+1}/{len(sites)}: {url} → {img_url or 'falhou'}"
+    return f"[{status}] Site {current_index+1}/{len(sites)}: {url} → {'screenshot salvo e enviado ao GitHub' if local_path else 'falhou'}"
 
 @app.route('/latest-screenshot')
 def latest_screenshot():
     files = [f for f in os.listdir(SCREENSHOTS_DIR) if f.endswith('.png')]
     if not files:
-        return "Nenhuma screenshot encontrada", 404
+        return "Nenhuma screenshot encontrada ainda. Acesse /trigger para gerar.", 404
     latest_file = max(files, key=lambda f: os.path.getmtime(os.path.join(SCREENSHOTS_DIR, f)))
-    return send_from_directory(SCREENSHOTS_DIR, latest_file)
+    return send_from_directory(SCREENSHOTS_DIR, latest_file, mimetype='image/png')
 
 @app.route('/')
 def home():
@@ -143,8 +149,8 @@ def home():
         f"Aplicação de screenshots rodando!<br>"
         f"Total de sites: {len(sites)}<br>"
         f"Próximo índice: {get_current_index()}<br>"
-        f"Use /trigger para capturar o próximo screenshot.<br>"
-        f"Configure cron-job.org para chamar /trigger a cada 5 minutos."
+        f"Use /trigger para capturar e enviar screenshot para GitHub.<br>"
+        f"Use /latest-screenshot para ver a última imagem salva (se existir)."
     )
 
 if __name__ == '__main__':
