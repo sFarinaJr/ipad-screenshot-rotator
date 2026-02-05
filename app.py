@@ -47,6 +47,38 @@ def save_current_index(index):
     with open(STATE_FILE, 'w') as f:
         json.dump({'current_index': index}, f)
 
+def handle_cookie_banner(page):
+    """Tenta remover banner de cookies clicando em botões comuns"""
+    common_selectors = [
+        'button:has-text("Aceitar")',
+        'button:has-text("Aceitar todos")',
+        'button:has-text("OK")',
+        'button:has-text("Continuar")',
+        'button:has-text("Allow")',
+        'button:has-text("Agree")',
+        'button:has-text("Accept all")',
+        '[aria-label*="aceitar" i]',
+        '[aria-label*="cookies" i] button',
+        '#onetrust-accept-btn-handler',  # OneTrust comum
+        '.cookie-accept',                # classes comuns
+        '[id*="cookie"][id*="accept"]',
+        '[class*="cookie"][class*="accept"]',
+    ]
+
+    for selector in common_selectors:
+        try:
+            button = page.locator(selector).first
+            if button.is_visible(timeout=3000):
+                print(f"Cookie banner detectado - clicando em: {selector}")
+                button.click(timeout=5000)
+                page.wait_for_timeout(2000)  # espera 2s para banner sumir
+                return True
+        except Exception:
+            pass  # ignora se não encontrar ou falhar
+    
+    print("Nenhum banner de cookies detectado ou clicado")
+    return False
+
 def take_screenshot(url, index):
     path = None
     try:
@@ -76,8 +108,10 @@ def take_screenshot(url, index):
             page = context.new_page()
             print(f"Navegando para {url}")
             page.goto(url, wait_until='networkidle', timeout=90000)
-            print("Página carregada - aguardando 10 segundos extras para conteúdo dinâmico")
-            page.wait_for_timeout(10000)  # ← PAUSA DE 10 SEGUNDOS AQUI
+            print("Página carregada - tratando banner de cookies")
+            handle_cookie_banner(page)
+            print("Aguardando 10 segundos extras para conteúdo dinâmico")
+            page.wait_for_timeout(10000)  # pausa de 10 segundos
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"screenshot_{index:02d}_{timestamp}.png"
             path = os.path.join(SCREENSHOTS_DIR, filename)
