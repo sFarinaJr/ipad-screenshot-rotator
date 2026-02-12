@@ -31,4 +31,4 @@ COPY . .
 
 # Usa variável de ambiente PORT do Render (padrão 10000)
 # Sintaxe shell para expandir $PORT
-CMD ["gunicorn", "--bind", "0.0.0.0:${PORT:-10000}", "--timeout", "120", "app:app"]
+CMD ["gunicorn", "-w", "1", "--bind", "0.0.0.0:${PORT:-10000}", "--timeout", "120", "app:app"]
