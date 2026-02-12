@@ -2,3 +2,4 @@ flask
 playwright
 gunicorn
 requests
+apscheduler
