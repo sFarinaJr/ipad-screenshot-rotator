@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 import base64
 import requests
+import atexit  # Novo: para shutdown do scheduler
+from apscheduler.schedulers.background import BackgroundScheduler  # Novo: scheduler
 
 app = Flask(__name__)
 
@@ -156,6 +158,26 @@ def take_screenshot(url, index):
         print(f"Erro ao capturar {url}: {str(e)}")
         path = None
     return path
+
+# Novo: Função para o scheduler (similar ao trigger, mas sem response HTTP)
+def scheduled_screenshot():
+    current_index = get_current_index()
+    url = sites[current_index]
+    local_path = take_screenshot(url, current_index)
+    
+    next_index = (current_index + 1) % len(sites)
+    save_current_index(next_index)
+    
+    status = "sucesso" if local_path else "falha"
+    print(f"[SCHEDULER] {status} - Site {current_index+1}/{len(sites)}: {url}")
+
+# Novo: Configura o scheduler para rodar a cada 10 minutos (ajuste o 'minutes' se quiser)
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=scheduled_screenshot, trigger="interval", minutes=10)
+scheduler.start()
+
+# Novo: Shutdown do scheduler ao parar o app
+atexit.register(lambda: scheduler.shutdown())
 
 @app.route('/trigger')
 def trigger():
