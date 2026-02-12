@@ -173,7 +173,7 @@ def scheduled_screenshot():
 
 # Novo: Configura o scheduler para rodar a cada 10 minutos (ajuste o 'minutes' se quiser)
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=scheduled_screenshot, trigger="interval", minutes=10)
+scheduler.add_job(func=scheduled_screenshot, trigger="interval", minutes=5)
 scheduler.start()
 
 # Novo: Shutdown do scheduler ao parar o app
